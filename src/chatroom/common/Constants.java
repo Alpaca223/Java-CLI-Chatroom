@@ -37,5 +37,6 @@ public interface Constants {
     String OFFLINE_NOTICE = "由于您超过30分钟未操作，已被系统强制下线！请重启客户端";
     Long INTERVAL = 10L;//客户端心跳检测间隔--分钟
     Long TIMEOUT_RANGE = 30L;
-    String FILE_STORAGE_PATH = "userFile";
+    String FILE_STORAGE_PATH = "userFile/server";
+    String FILE_STORAGE_PATH_CLIENT = "userFile";
 }

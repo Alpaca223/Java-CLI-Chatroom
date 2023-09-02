@@ -4,10 +4,7 @@ import chatroom.common.Check;
 import chatroom.common.Message;
 import chatroom.common.User;
 
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
 import java.util.Timer;
@@ -54,6 +51,7 @@ public class ChatClient {
                     } else if (chatMessage.getTo().toLowerCase().contains(currentUsername.toLowerCase())
                             || chatMessage.getTo().contains(NO_NAME)) {
                         String from = chatMessage.getFrom().substring(1).trim();
+                        String to = chatMessage.getTo().trim();
                         String message = chatMessage.getMessage().trim();
                         if (message.contains(OFFLINE)) {
                             System.out.println(OFFLINE_NOTICE);
@@ -61,6 +59,20 @@ public class ChatClient {
                             System.exit(0);
                         } else if (!chatMessage.getFrom().equalsIgnoreCase(HEART_BRAT)) {
                             //发送不是心跳检测的消息
+                            if (chatMessage.getFrom().equalsIgnoreCase(SEND_FILE)) {
+                                String filename = to.substring(to.indexOf(SPACE_STRING) + 1);
+                                File directory = new File(FILE_STORAGE_PATH_CLIENT + File.separator + currentUsername);
+                                if (!directory.exists()) {
+                                    directory.mkdirs();
+                                }
+                                File file = new File(directory.getAbsolutePath() + File.separatorChar + filename);
+                                FileOutputStream fos = new FileOutputStream(file);
+                                byte[] ret = getByteArray(message);
+                                fos.write(ret, 0, ret.length);
+                                fos.flush();
+                                fos.close();
+                                continue;
+                            }
                             System.out.println("form\"" + from + "\":" + message);
                         }
                     }
@@ -97,6 +109,22 @@ public class ChatClient {
             }
         });
         writeThread.start();
+    }
+
+    /**
+     * 把传过来的字符串数据转换为byte数组
+     *
+     * @param string 传的字符串
+     * @return byte[]
+     */
+    private byte[] getByteArray(String string) {
+        String format = string.substring(1, (string.length() - 1));
+        String[] arr = format.split(",");
+        byte[] bytes = new byte[arr.length];
+        for (int i = 0; i < arr.length; i++) {
+            bytes[i] = Byte.parseByte(arr[i].trim());
+        }
+        return bytes;
     }
 
     private Message createMessage() {

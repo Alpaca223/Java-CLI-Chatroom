@@ -6,6 +6,6 @@
 3.可以查看在线用户列表:@admin list  
 4.可以和在线用户私聊：@用户名跟某个用户聊天，如果和同一个用户聊天，后续的消息则无需再次输入@  
 5.可以进行群发消息（消息内容仅限文本）：@all 消息  
-6.可以发送文件：@file 目标用户 文件全路径（如C:\Users\xxx\Desktop\xxx.txt）,接收的文件默认保存在项目的userFile路径下  
+6.可以发送文件：@file 目标用户 文件全路径（如C:\Users\xxx\Desktop\xxx.txt）,接收的文件默认保存在项目的userFile路径下。服务端也会保存一份到userFile\server路径  
 7.可以修改昵称：@setName 名称  
 8.可以退出聊天室：@admin logoff

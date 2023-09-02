@@ -4,16 +4,10 @@ import chatroom.common.Check;
 import chatroom.common.Message;
 import chatroom.common.User;
 
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -52,6 +46,39 @@ public class ChatServer {
             // 每接收到一个Socket就建立一个新的线程来处理它
             service.submit(new Transfer(socket));
         }
+    }
+
+    /**
+     * 读取文件返回byte
+     *
+     * @param file 文件全路径
+     * @return byte数组的引用
+     */
+    private static byte[] readOnce(File file) throws IOException {
+        // check the file is too long if the file length is too long, returned. because the byte array can not buffer.
+        // byte array bufferSize=file.length, and must between 0 and Integer_MAX_VALUE
+        if (file.length() > Integer.MAX_VALUE) {
+            System.err.println("file is too big ,can't read !");
+            throw new IOException(file.getName() + " is too big ,can't read ");
+        }
+        int _bufferSize = (int) file.length();
+        //定义buffer缓冲区大小
+        byte[] buffer = new byte[_bufferSize];
+        FileInputStream in = null;
+        try {
+            in = new FileInputStream(file);
+            int len = 0;
+            if ((len = in.available()) <= buffer.length) {
+                in.read(buffer, 0, len);
+            }
+        } finally {
+            try {
+                in.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return buffer;
     }
 
     /**
@@ -135,7 +162,12 @@ public class ChatServer {
                                         fos.write(bytes, 0, length);
                                         fos.flush();
                                     }
-                                    serverUserMap.get(targetUser).sendMessage(new Message(CHAT_WITH_START + "系统信息", targetUser, "已接收来自用户" + senderUser + "的文件，" + "文件名：" + fileName + " 大小：" + fileLength + "字节。保存在路径：" + file));
+                                    //发给实际要发送的用户
+                                    byte[] bytesForClient = readOnce(file);
+                                    serverUserMap.get(targetUser).sendMessage(new Message(SEND_FILE, targetUser + SPACE_STRING + fileName, Arrays.toString(bytesForClient)));
+                                    File clientDirectory = new File(FILE_STORAGE_PATH_CLIENT + File.separator + targetUser);
+                                    File clientFile = new File(clientDirectory.getAbsolutePath() + File.separatorChar + fileName);
+                                    serverUserMap.get(targetUser).sendMessage(new Message(CHAT_WITH_START + "系统信息", targetUser, "已接收来自用户" + senderUser + "的文件，" + "文件名：" + fileName + " 大小：" + fileLength + "字节。保存在路径：" + clientFile));
                                     serverUserMap.get(senderUser).sendMessage(new Message(CHAT_WITH_START + "系统信息", senderUser, "文件已成功发送给" + targetUser));
                                 } catch (Exception e) {
                                     e.printStackTrace();
