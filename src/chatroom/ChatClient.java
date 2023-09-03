@@ -68,7 +68,7 @@ public class ChatClient {
                                 File file = new File(directory.getAbsolutePath() + File.separatorChar + filename);
 
                                 try (
-                                        FileOutputStream fos = new FileOutputStream(file);
+                                        FileOutputStream fos = new FileOutputStream(file, true);
                                 ) {
                                     clientFileMap.put(filename, fos);//加入map当中
                                     byte[] ret = getByteArray(message);
