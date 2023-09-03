@@ -49,39 +49,6 @@ public class ChatServer {
     }
 
     /**
-     * 读取文件返回byte
-     *
-     * @param file 文件全路径
-     * @return byte数组的引用
-     */
-    private static byte[] readOnce(File file) throws IOException {
-        // check the file is too long if the file length is too long, returned. because the byte array can not buffer.
-        // byte array bufferSize=file.length, and must between 0 and Integer_MAX_VALUE
-        if (file.length() > Integer.MAX_VALUE) {
-            System.err.println("file is too big ,can't read !");
-            throw new IOException(file.getName() + " is too big ,can't read ");
-        }
-        int _bufferSize = (int) file.length();
-        //定义buffer缓冲区大小
-        byte[] buffer = new byte[_bufferSize];
-        FileInputStream in = null;
-        try {
-            in = new FileInputStream(file);
-            int len = 0;
-            if ((len = in.available()) <= buffer.length) {
-                in.read(buffer, 0, len);
-            }
-        } finally {
-            try {
-                in.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return buffer;
-    }
-
-    /**
      * 处理客户端传输过来的命令
      * 处理文件--文件线程
      */
@@ -89,8 +56,6 @@ public class ChatServer {
         private Socket socket;
         private String userName = null;
         private String message;
-        private DataInputStream dis;
-        private FileOutputStream fos;
 
         public Transfer(Socket socket) {
             this.socket = socket;
@@ -133,8 +98,6 @@ public class ChatServer {
                         }
                         setLastUseTime();
                     } else {
-                        Socket fileSocket = fileServer.accept();
-                        System.out.println("文件传输已接收来自客户端的ip：" + fileSocket.getRemoteSocketAddress());
                         Thread fileTransfer = new Thread(() -> {
                             //处理文件，获取 目标用户名 和 发送用户名
                             Message get = formattedMessage.buildMessage(message);
@@ -144,8 +107,13 @@ public class ChatServer {
                             if (!isOnline(targetUser)) {
                                 serverUserMap.get(senderUser).sendMessage(new Message(CHAT_WITH_START + "系统信息", senderUser, "用户 " + targetUser + " 已离线"));
                             } else {
-                                try {
-                                    dis = new DataInputStream(fileSocket.getInputStream());
+                                try (
+                                        Socket fileSocket = fileServer.accept();
+                                        DataInputStream dis = new DataInputStream(fileSocket.getInputStream());
+
+                                ) {
+                                    System.out.println("文件传输已接收来自客户端的ip：" + fileSocket.getRemoteSocketAddress());
+
                                     String fileName = dis.readUTF();
                                     long fileLength = dis.readLong();
                                     // 自定义文件夹存放上传的文件
@@ -153,33 +121,25 @@ public class ChatServer {
                                     if (!directory.exists()) {
                                         directory.mkdirs();
                                     }
-                                    File file = new File(directory.getAbsolutePath() + File.separatorChar + fileName);
-                                    fos = new FileOutputStream(file);
-                                    // 开始接收文件
-                                    byte[] bytes = new byte[1024];
-                                    int length = 0;
-                                    while ((length = dis.read(bytes, 0, bytes.length)) != -1) {
-                                        fos.write(bytes, 0, length);
-                                        fos.flush();
+                                    String filename = senderUser + "-" + fileName;
+                                    File file = new File(directory.getAbsolutePath() + File.separatorChar + filename);
+                                    try (
+                                            FileOutputStream fos = new FileOutputStream(file);
+                                    ) {
+                                        // 开始接收文件
+                                        byte[] bytes = new byte[1024];
+                                        int length = 0;
+                                        while ((length = dis.read(bytes, 0, bytes.length)) != -1) {
+                                            fos.write(bytes, 0, length);
+                                            fos.flush();
+                                            serverUserMap.get(targetUser).sendMessage(new Message(SEND_FILE, targetUser + SPACE_STRING + filename, Arrays.toString(bytes)));
+                                        }
                                     }
-                                    //发给实际要发送的用户
-                                    byte[] bytesForClient = readOnce(file);
-                                    serverUserMap.get(targetUser).sendMessage(new Message(SEND_FILE, targetUser + SPACE_STRING + fileName, Arrays.toString(bytesForClient)));
-                                    File clientDirectory = new File(FILE_STORAGE_PATH_CLIENT + File.separator + targetUser);
-                                    File clientFile = new File(clientDirectory.getAbsolutePath() + File.separatorChar + fileName);
-                                    serverUserMap.get(targetUser).sendMessage(new Message(CHAT_WITH_START + "系统信息", targetUser, "已接收来自用户" + senderUser + "的文件，" + "文件名：" + fileName + " 大小：" + fileLength + "字节。保存在路径：" + clientFile));
+
+                                    serverUserMap.get(targetUser).sendMessage(new Message(CHAT_WITH_START + "系统信息", targetUser, "已接收来自用户" + senderUser + "的文件，" + "文件名：" + filename + " 大小：" + fileLength + "字节。"));
                                     serverUserMap.get(senderUser).sendMessage(new Message(CHAT_WITH_START + "系统信息", senderUser, "文件已成功发送给" + targetUser));
                                 } catch (Exception e) {
                                     e.printStackTrace();
-                                } finally {
-                                    try {
-                                        if (fos != null)
-                                            fos.close();
-                                        if (dis != null)
-                                            dis.close();
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
                                 }
                             }
                             serverUserMap.get(senderUser).setLastUseTime(Calendar.getInstance().getTime());

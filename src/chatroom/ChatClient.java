@@ -6,25 +6,23 @@ import chatroom.common.User;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.Scanner;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import static chatroom.common.Constants.*;
 
 public class ChatClient {
     private Socket client;
-    private Socket fileClient;
     private String SERVER_IP;
-    private FileInputStream fis;
-    private DataOutputStream dos;
+    private File directory;
     private Scanner scanner = new Scanner(System.in);
     private User user;
     private User fileTransport;
     private Message message;
     private String currentUsername;
     private String lastChatUser;
+    private Map<String, FileOutputStream> clientFileMap = new ConcurrentHashMap<>();
 
     //创建客户端，并指定接收的服务端IP和端口号
     public ChatClient(String SERVER_IP) throws IOException {
@@ -61,19 +59,41 @@ public class ChatClient {
                             //发送不是心跳检测的消息
                             if (chatMessage.getFrom().equalsIgnoreCase(SEND_FILE)) {
                                 String filename = to.substring(to.indexOf(SPACE_STRING) + 1);
-                                File directory = new File(FILE_STORAGE_PATH_CLIENT + File.separator + currentUsername);
+
+                                directory = new File(FILE_STORAGE_PATH_CLIENT + File.separator + currentUsername);
                                 if (!directory.exists()) {
                                     directory.mkdirs();
                                 }
+
                                 File file = new File(directory.getAbsolutePath() + File.separatorChar + filename);
-                                FileOutputStream fos = new FileOutputStream(file);
-                                byte[] ret = getByteArray(message);
-                                fos.write(ret, 0, ret.length);
-                                fos.flush();
-                                fos.close();
-                                continue;
+
+                                try (
+                                        FileOutputStream fos = new FileOutputStream(file);
+                                ) {
+                                    clientFileMap.put(filename, fos);//加入map当中
+                                    byte[] ret = getByteArray(message);
+                                    fos.write(ret, 0, ret.length);
+                                    fos.flush();
+                                    fos.close();
+                                    continue;
+                                }
+
                             }
                             System.out.println("form\"" + from + "\":" + message);
+                            if (message.contains("已接收来自用户")) {
+                                String[] ret = message.split("：");
+                                String filename = ret[1].substring(0, ret[1].indexOf("大") - 1).trim();
+                                if (clientFileMap.containsKey(filename)) {
+                                    if (clientFileMap.size() > 1) {
+                                        clientFileMap.remove(filename);
+                                        System.out.println("文件保存在：" + directory.getAbsolutePath() + "\\" + filename);
+                                        continue;
+                                    }
+                                    clientFileMap.get(filename).close();//收到相应的关闭
+                                    clientFileMap.remove(filename);
+                                }
+                                System.out.println("文件保存在：" + directory.getAbsolutePath() + "\\" + filename);
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -136,10 +156,12 @@ public class ChatClient {
                 to = line.substring(0, line.indexOf(SPACE_STRING)).trim();
 
                 if (line.startsWith(SEND_FILE)) {
-                    try {
-                        this.fileClient = new Socket(SERVER_IP, FILE_PORT);
+                    try (
+                            Socket fileClient = new Socket(SERVER_IP, FILE_PORT);
+                    ) {
                         System.out.println("连接文件传输服务端成功，服务端地址为：" + fileClient.getRemoteSocketAddress());
-                        fileTransport = new User(this.fileClient);
+                        fileTransport = new User(fileClient);
+
                         String[] strings = line.split(SPACE_STRING);
                         StringBuilder path = new StringBuilder();
                         for (int i = 2; i < strings.length; i++) {
@@ -189,9 +211,10 @@ public class ChatClient {
     //向服务端传输文件
     private void sendFile(String fileName) throws IOException {
         File file = new File(fileName);
-        try {
-            fis = new FileInputStream(file);
-            dos = new DataOutputStream(fileTransport.getSocket().getOutputStream());
+        try (
+                FileInputStream fis = new FileInputStream(file);
+                DataOutputStream dos = new DataOutputStream(fileTransport.getSocket().getOutputStream());
+        ) {
             dos.writeUTF(file.getName());
             dos.flush();
             dos.writeLong(file.length());
@@ -206,16 +229,6 @@ public class ChatClient {
         } catch (IOException e) {
             e.printStackTrace();
             System.out.println("文件传输异常");
-            if (fis != null)
-                fis.close();
-            if (dos != null)
-                dos.close();
-        } finally {
-            // 传输完关闭流
-            if (fis != null)
-                fis.close();
-            if (dos != null)
-                dos.close();
         }
     }
 
